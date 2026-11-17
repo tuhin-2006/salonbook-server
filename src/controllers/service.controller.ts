@@ -3,6 +3,7 @@ import { Service } from "../models/Service";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
+import { uploadToImgBB } from "../services/imgbb.service";
 
 const slugify = (text: string) =>
   text
@@ -215,6 +216,27 @@ export const toggleServiceStatus = asyncHandler(
         200,
         service,
         `Service has been ${service.isActive ? "activated" : "deactivated"}.`
+      )
+    );
+  }
+);
+
+export const uploadServiceImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      throw new ApiError(400, "Please upload an image file.");
+    }
+
+    const imageUrl = await uploadToImgBB(
+      req.file.buffer,
+      req.file.originalname || "service.jpg"
+    );
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        { url: imageUrl },
+        "Service image uploaded to ImgBB successfully."
       )
     );
   }

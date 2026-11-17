@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import {
   getServices,
   getFeaturedServices,
@@ -8,6 +9,7 @@ import {
   updateService,
   deleteService,
   toggleServiceStatus,
+  uploadServiceImage,
 } from "../controllers/service.controller";
 import { authenticate } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/rbac";
@@ -16,6 +18,11 @@ import {
   createServiceSchema,
   updateServiceSchema,
 } from "../validators/service.validator";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
 
 const router = Router();
 
@@ -26,6 +33,13 @@ router.get("/categories", getCategories);
 router.get("/:id", getServiceById);
 
 // Admin-protected routes
+router.post(
+  "/upload-image",
+  authenticate,
+  requireAdmin,
+  upload.single("image"),
+  uploadServiceImage
+);
 router.post(
   "/",
   authenticate,
