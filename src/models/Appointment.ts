@@ -1,11 +1,13 @@
 import { Schema, model, Document, Types } from "mongoose";
-import { APPOINTMENT_STATUS, AppointmentStatus } from "../constants";
+import { APPOINTMENT_STATUS, AppointmentStatus, PAYMENT_STATUS, PaymentStatus } from "../constants";
 
 export interface IAppointment extends Document {
   customerId: Types.ObjectId;
   serviceId: Types.ObjectId;
   appointmentDate: Date;
   timeSlot: string;
+  servicePrice: number;
+  paymentStatus: PaymentStatus;
   status: AppointmentStatus;
   transactionId?: Types.ObjectId;
   notes?: string;
@@ -38,6 +40,18 @@ const appointmentSchema = new Schema<IAppointment>(
       type: String,
       required: [true, "Time slot is required"],
       trim: true,
+    },
+    servicePrice: {
+      type: Number,
+      required: [true, "Service price is required"],
+      min: [0, "Service price cannot be negative"],
+      default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: Object.values(PAYMENT_STATUS),
+      default: PAYMENT_STATUS.UNPAID,
+      index: true,
     },
     status: {
       type: String,

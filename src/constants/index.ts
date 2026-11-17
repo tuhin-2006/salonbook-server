@@ -15,6 +15,14 @@ export const APPOINTMENT_STATUS = {
 export type AppointmentStatus =
   (typeof APPOINTMENT_STATUS)[keyof typeof APPOINTMENT_STATUS];
 
+export const PAYMENT_STATUS = {
+  UNPAID: "unpaid",
+  PAID: "paid",
+} as const;
+
+export type PaymentStatus =
+  (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+
 export const TRANSACTION_STATUS = {
   PENDING: "pending",
   SUCCEEDED: "succeeded",
@@ -26,6 +34,14 @@ export type TransactionStatus =
   (typeof TRANSACTION_STATUS)[keyof typeof TRANSACTION_STATUS];
 
 export const SERVICE_CATEGORIES = [
+  "Hair",
+  "Nails",
+  "Facial & Skin",
+  "Massage",
+  "Makeup",
+  "Barbering",
+  "Spa & Wellness",
+  "Waxing",
   "Hair Styling & Cut",
   "Facial & Skincare",
   "Nails & Manicure",

@@ -1,14 +1,15 @@
 import mongoose from "mongoose";
 import { User } from "../models/User";
 import { Service } from "../models/Service";
+import { Appointment } from "../models/Appointment";
 import { ENV } from "../config/env";
-import { USER_ROLES } from "../constants";
+import { APPOINTMENT_STATUS, PAYMENT_STATUS, USER_ROLES } from "../constants";
 
 const initialServices = [
   {
     title: "Signature Balayage & Silk Glaze",
     slug: "signature-balayage-silk-glaze",
-    category: "Hair Styling & Cut",
+    category: "Hair",
     description:
       "A hand-painted custom French balayage tailored to your complexion and bone structure, finished with a luminous silk shine glaze and luxury botanical blowout.",
     price: 185,
@@ -23,7 +24,7 @@ const initialServices = [
   {
     title: "Precision Editorial Cut & Blowout",
     slug: "precision-editorial-cut-blowout",
-    category: "Hair Styling & Cut",
+    category: "Hair",
     description:
       "A bespoke precision haircut tailored to your hair texture, featuring a scalp detox ritual, customized deep conditioning masque, and signature runway blowout.",
     price: 95,
@@ -35,9 +36,23 @@ const initialServices = [
     specialists: ["Chloe Moreau", "David Rossi"],
   },
   {
+    title: "Russian Gel Manicure & Botanical Spa",
+    slug: "russian-gel-manicure-botanical-spa",
+    category: "Nails",
+    description:
+      "Flawless dry e-file cuticle work, structural apex gel reinforcement, nourishing organic rose petal soak, and organic argan oil arm massage.",
+    price: 75,
+    durationMinutes: 75,
+    images: [
+      "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=800&q=80",
+    ],
+    isActive: true,
+    specialists: ["Mia Lindqvist"],
+  },
+  {
     title: "Caviar & 24K Gold Youth Radiance Facial",
     slug: "caviar-gold-youth-radiance-facial",
-    category: "Facial & Skincare",
+    category: "Facial & Skin",
     description:
       "An opulent anti-aging skincare journey featuring wild French caviar extract, 24K colloidal gold infusion, micro-current lifting, and cryo oxygen therapy.",
     price: 220,
@@ -50,37 +65,9 @@ const initialServices = [
     specialists: ["Dr. Aurelia Chen (Aesthetician)", "Sarah Jenkins"],
   },
   {
-    title: "Hydra-Luxe Deep Cleanse & Extraction",
-    slug: "hydra-luxe-deep-cleanse-extraction",
-    category: "Facial & Skincare",
-    description:
-      "Vortex-fusion medical grade hydration, sonic extractions, salicylic clarifying peel, and antioxidant LED light therapy to unveil glass-like luminosity.",
-    price: 140,
-    durationMinutes: 60,
-    images: [
-      "https://images.unsplash.com/photo-1512290900672-1f41d996d926?auto=format&fit=crop&w=800&q=80",
-    ],
-    isActive: true,
-    specialists: ["Sarah Jenkins"],
-  },
-  {
-    title: "Russian Gel Manicure & Botanical Spa",
-    slug: "russian-gel-manicure-botanical-spa",
-    category: "Nails & Manicure",
-    description:
-      "Flawless dry e-file cuticle work, structural apex gel reinforcement, nourishing organic rose petal soak, and organic argan oil arm massage.",
-    price: 75,
-    durationMinutes: 75,
-    images: [
-      "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=800&q=80",
-    ],
-    isActive: true,
-    specialists: ["Mia Lindqvist"],
-  },
-  {
     title: "Deep Tissue Aromatherapy Hot Stone Ritual",
     slug: "deep-tissue-aromatherapy-hot-stone-ritual",
-    category: "Massage & Body Spa",
+    category: "Massage",
     description:
       "Heated basalt stones infused with organic lavender and frankincense essential oils to melt away chronic muscular tension and restore nervous equilibrium.",
     price: 160,
@@ -94,7 +81,7 @@ const initialServices = [
   {
     title: "Royal Bridal Couture Glamour Package",
     slug: "royal-bridal-couture-glamour-package",
-    category: "Bridal & Makeup",
+    category: "Makeup",
     description:
       "The definitive bridal look featuring high-definition airbrush makeup, couture hair updo, veil positioning, luxury mink lash application, and touch-up kit.",
     price: 320,
@@ -108,7 +95,7 @@ const initialServices = [
   {
     title: "Executive Beard Sculpt & Hot Towel Shave",
     slug: "executive-beard-sculpt-hot-towel-shave",
-    category: "Men's Grooming",
+    category: "Barbering",
     description:
       "Traditional straight razor precision line work, eucalyptus steam towels, sandalwood pre-shave oil massage, and organic cold-pressed beard conditioning balm.",
     price: 65,
@@ -119,6 +106,34 @@ const initialServices = [
     isActive: true,
     specialists: ["Marco Rossi"],
   },
+  {
+    title: "Aromatherapy Thermal Spa & Hydro-Detox",
+    slug: "aromatherapy-thermal-spa-hydro-detox",
+    category: "Spa & Wellness",
+    description:
+      "A complete hydro-detox experience featuring steam inhalation, mineral-rich thermal salt soak, lymphatic dry brushing, and restorative herbal tea ceremony.",
+    price: 150,
+    durationMinutes: 90,
+    images: [
+      "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80",
+    ],
+    isActive: true,
+    specialists: ["Camilla Dubois"],
+  },
+  {
+    title: "Gentle Botanical Full Body Waxing",
+    slug: "gentle-botanical-full-body-waxing",
+    category: "Waxing",
+    description:
+      "Hypoallergenic organic chamomile hard wax treatment designed for sensitive skin, followed by soothing lavender and tea tree calming serum.",
+    price: 110,
+    durationMinutes: 60,
+    images: [
+      "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&w=800&q=80",
+    ],
+    isActive: true,
+    specialists: ["Chloe Moreau"],
+  },
 ];
 
 const seed = async () => {
@@ -127,9 +142,9 @@ const seed = async () => {
     console.log("[Seed] Connected to database.");
 
     // 1. Seed Administrator
-    const existingAdmin = await User.findOne({ email: "admin@salonbook.com" });
-    if (!existingAdmin) {
-      await User.create({
+    let admin = await User.findOne({ email: "admin@salonbook.com" });
+    if (!admin) {
+      admin = await User.create({
         name: "SalonBook Administrator",
         email: "admin@salonbook.com",
         password: "Admin@123456",
@@ -143,11 +158,11 @@ const seed = async () => {
     }
 
     // 2. Seed Customer
-    const existingCustomer = await User.findOne({
+    let customer = await User.findOne({
       email: "customer@salonbook.com",
     });
-    if (!existingCustomer) {
-      await User.create({
+    if (!customer) {
+      customer = await User.create({
         name: "Sophia Montgomery",
         email: "customer@salonbook.com",
         password: "Customer@123456",
@@ -166,6 +181,40 @@ const seed = async () => {
       }
     }
     console.log(`[Seed] Services seeded (${initialServices.length} items verified).`);
+
+    // 4. Seed sample appointments if none exist
+    const appointmentCount = await Appointment.countDocuments();
+    if (appointmentCount === 0 && customer) {
+      const services = await Service.find().limit(2);
+      if (services.length > 0) {
+        // Pending appointment
+        await Appointment.create({
+          customerId: customer._id,
+          serviceId: services[0]._id,
+          appointmentDate: new Date(Date.now() + 86400000 * 2), // 2 days later
+          timeSlot: "02:00 PM",
+          servicePrice: services[0].price,
+          paymentStatus: PAYMENT_STATUS.UNPAID,
+          status: APPOINTMENT_STATUS.PENDING,
+          notes: "First time visit. Looking forward to the ritual.",
+        });
+
+        // Confirmed unpaid appointment
+        if (services.length > 1) {
+          await Appointment.create({
+            customerId: customer._id,
+            serviceId: services[1]._id,
+            appointmentDate: new Date(Date.now() + 86400000 * 5), // 5 days later
+            timeSlot: "11:00 AM",
+            servicePrice: services[1].price,
+            paymentStatus: PAYMENT_STATUS.UNPAID,
+            status: APPOINTMENT_STATUS.CONFIRMED,
+            notes: "Confirmed by salon. Ready for payment.",
+          });
+        }
+        console.log("[Seed] Sample customer appointments seeded.");
+      }
+    }
 
     console.log("[Seed] Seeding completed successfully!");
     process.exit(0);

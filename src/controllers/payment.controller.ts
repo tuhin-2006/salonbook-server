@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
-import { stripe } from "../services/stripe.service";
+import { stripe, createStripeCheckoutSession } from "../services/stripe.service";
 import { ENV } from "../config/env";
 import { Appointment } from "../models/Appointment";
 import { Transaction } from "../models/Transaction";
-import { APPOINTMENT_STATUS, TRANSACTION_STATUS } from "../constants";
+import { IService } from "../models/Service";
+import { APPOINTMENT_STATUS, PAYMENT_STATUS, TRANSACTION_STATUS, USER_ROLES } from "../constants";
 import { AuthenticatedRequest } from "../middlewares/auth";
+import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
 
@@ -63,6 +65,7 @@ export const handleStripeWebhook = async (
             });
           }
 
+          appointment.paymentStatus = PAYMENT_STATUS.PAID;
           appointment.status = APPOINTMENT_STATUS.CONFIRMED;
           appointment.transactionId = transaction._id;
           await appointment.save();
@@ -79,6 +82,124 @@ export const handleStripeWebhook = async (
 
   res.status(200).json({ received: true });
 };
+
+export const createAppointmentCheckoutSession = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Authentication required.");
+    }
+
+    const { appointmentId } = req.body;
+    if (!appointmentId) {
+      throw new ApiError(400, "Appointment ID is required.");
+    }
+
+    const appointment = await Appointment.findById(appointmentId).populate<{
+      serviceId: IService;
+    }>("serviceId");
+
+    if (!appointment) {
+      throw new ApiError(404, "Appointment not found.");
+    }
+
+    if (
+      !appointment.customerId.equals(req.user._id) &&
+      req.user.role !== USER_ROLES.ADMIN
+    ) {
+      throw new ApiError(
+        403,
+        "Access denied. You can only initiate payment for your own appointments."
+      );
+    }
+
+    if (appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
+      throw new ApiError(
+        400,
+        "Only confirmed appointments can be paid. Please wait for salon confirmation."
+      );
+    }
+
+    if (appointment.paymentStatus === PAYMENT_STATUS.PAID) {
+      throw new ApiError(400, "This appointment has already been paid.");
+    }
+
+    const serviceTitle = appointment.serviceId?.title || "Salon Service";
+    const amount =
+      appointment.servicePrice || appointment.serviceId?.price || 50;
+
+    let checkoutUrl = "";
+    if (
+      ENV.STRIPE_SECRET_KEY &&
+      !ENV.STRIPE_SECRET_KEY.includes("your_stripe")
+    ) {
+      const session = await createStripeCheckoutSession({
+        appointmentId: appointment._id.toString(),
+        serviceTitle,
+        amount,
+        customerEmail: req.user.email,
+        successUrl: `${ENV.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&appointment_id=${appointment._id}`,
+        cancelUrl: `${ENV.CLIENT_URL}/payment/cancel?appointment_id=${appointment._id}`,
+      });
+
+      appointment.stripeSessionId = session.id;
+      await appointment.save();
+      checkoutUrl = session.url || "";
+    } else {
+      // Development mock fallback if Stripe secret key has not yet been populated
+      const mockSessionId = `cs_mock_${Date.now()}`;
+      appointment.stripeSessionId = mockSessionId;
+      await appointment.save();
+      checkoutUrl = `${ENV.CLIENT_URL}/payment/success?session_id=${mockSessionId}&appointment_id=${appointment._id}`;
+    }
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        { checkoutUrl },
+        "Stripe checkout session initialized successfully."
+      )
+    );
+  }
+);
+
+export const simulateDevPayment = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId, sessionId } = req.body;
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      throw new ApiError(404, "Appointment not found.");
+    }
+
+    let transaction = await Transaction.findOne({
+      stripeSessionId: sessionId || appointment.stripeSessionId || `dev_${appointment._id}`,
+    });
+
+    if (!transaction) {
+      transaction = await Transaction.create({
+        customerId: appointment.customerId,
+        appointmentId: appointment._id,
+        stripeSessionId: sessionId || appointment.stripeSessionId || `dev_${Date.now()}`,
+        amount: appointment.servicePrice,
+        currency: "usd",
+        status: TRANSACTION_STATUS.SUCCEEDED,
+      });
+    }
+
+    appointment.paymentStatus = PAYMENT_STATUS.PAID;
+    appointment.status = APPOINTMENT_STATUS.CONFIRMED;
+    appointment.transactionId = transaction._id;
+    await appointment.save();
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        { appointment, transaction },
+        "Payment verified and recorded."
+      )
+    );
+  }
+);
 
 export const getMyTransactions = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {

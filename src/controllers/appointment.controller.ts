@@ -5,9 +5,7 @@ import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AuthenticatedRequest } from "../middlewares/auth";
-import { APPOINTMENT_STATUS, USER_ROLES } from "../constants";
-import { createStripeCheckoutSession } from "../services/stripe.service";
-import { ENV } from "../config/env";
+import { APPOINTMENT_STATUS, PAYMENT_STATUS, USER_ROLES } from "../constants";
 
 export const ALL_SALON_SLOTS = [
   "09:00 AM",
@@ -99,47 +97,17 @@ export const bookAppointment = asyncHandler(
       serviceId: service._id,
       appointmentDate: targetDate,
       timeSlot,
+      servicePrice: service.price,
+      paymentStatus: PAYMENT_STATUS.UNPAID,
       notes: notes || "",
       status: APPOINTMENT_STATUS.PENDING,
     });
 
-    let checkoutUrl = "";
-    try {
-      if (ENV.STRIPE_SECRET_KEY) {
-        const session = await createStripeCheckoutSession({
-          appointmentId: appointment._id.toString(),
-          serviceTitle: service.title,
-          amount: service.price,
-          customerEmail: req.user.email,
-          successUrl: `${ENV.CLIENT_URL}/booking/success?session_id={CHECKOUT_SESSION_ID}&appointment_id=${appointment._id}`,
-          cancelUrl: `${ENV.CLIENT_URL}/booking/cancel?appointment_id=${appointment._id}`,
-        });
-
-        appointment.stripeSessionId = session.id;
-        await appointment.save();
-        checkoutUrl = session.url || "";
-      } else {
-        // Fallback in dev without stripe keys: confirm directly
-        appointment.status = APPOINTMENT_STATUS.CONFIRMED;
-        await appointment.save();
-        checkoutUrl = `${ENV.CLIENT_URL}/booking/success?appointment_id=${appointment._id}`;
-      }
-    } catch (stripeError) {
-      console.error("[Stripe Session Error]:", stripeError);
-      // If Stripe fails, allow manual booking confirmation in dev
-      appointment.status = APPOINTMENT_STATUS.CONFIRMED;
-      await appointment.save();
-      checkoutUrl = `${ENV.CLIENT_URL}/booking/success?appointment_id=${appointment._id}`;
-    }
-
     res.status(201).json(
       new ApiResponse(
         201,
-        {
-          appointment,
-          checkoutUrl,
-        },
-        "Appointment booked successfully."
+        appointment,
+        "Appointment booking request submitted successfully. Awaiting salon confirmation."
       )
     );
   }
@@ -187,6 +155,17 @@ export const cancelAppointment = asyncHandler(
       throw new ApiError(
         403,
         "Access denied. You cannot cancel another user's appointment."
+      );
+    }
+
+    // Customer Action Rule: Only allowed on pending appointments
+    if (
+      req.user.role !== USER_ROLES.ADMIN &&
+      appointment.status !== APPOINTMENT_STATUS.PENDING
+    ) {
+      throw new ApiError(
+        400,
+        "Only pending appointments can be cancelled. Confirmed appointments cannot be cancelled."
       );
     }
 
