@@ -59,7 +59,7 @@ const initialServices = [
     durationMinutes: 90,
     images: [
       "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1512290900672-1f41d996d926?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=800&q=80",
     ],
     isActive: true,
     specialists: ["Dr. Aurelia Chen (Aesthetician)", "Sarah Jenkins"],
