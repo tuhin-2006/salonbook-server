@@ -12,7 +12,7 @@ export const ENV = {
   BETTER_AUTH_SECRET:
     process.env.BETTER_AUTH_SECRET || "salonbook_better_auth_dev_secret_key_32chars",
   BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:5000",
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || "",
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || "sk_test_placeholder_key",
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || "",
   STRIPE_CURRENCY: process.env.STRIPE_CURRENCY || "usd",
   IMGBB_API_KEY: process.env.IMGBB_API_KEY || "",

@@ -1,10 +1,13 @@
 import Stripe from "stripe";
 import { ENV } from "../config/env";
 
-export const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-01-27.acacia" as unknown as Stripe.LatestApiVersion,
-  typescript: true,
-});
+export const stripe = new Stripe(
+  ENV.STRIPE_SECRET_KEY || "sk_test_placeholder_key",
+  {
+    apiVersion: "2025-01-27.acacia" as unknown as Stripe.LatestApiVersion,
+    typescript: true,
+  }
+);
 
 export const createStripeCheckoutSession = async ({
   appointmentId,
