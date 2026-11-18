@@ -17,11 +17,18 @@ export const createApp = (): Application => {
   // CORS Configuration
   app.use(
     cors({
-      origin: [
-        ENV.CLIENT_URL,
-        "http://localhost:3000",
-        "https://salonbook.vercel.app",
-      ],
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (
+          origin === "http://localhost:3000" ||
+          origin === ENV.CLIENT_URL ||
+          origin.includes("vercel.app") ||
+          origin.includes("salonbook")
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true); // Permissive for production preview
+      },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
