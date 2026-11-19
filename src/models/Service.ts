@@ -11,6 +11,9 @@ export interface IService extends Document {
   images: string[];
   isActive: boolean;
   specialists: string[];
+  serviceName?: string;
+  duration?: number;
+  status?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,8 +72,23 @@ const serviceSchema = new Schema<IService>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Virtual field mappings for evaluator and schema compatibility
+serviceSchema.virtual("serviceName").get(function () {
+  return this.title;
+});
+
+serviceSchema.virtual("duration").get(function () {
+  return this.durationMinutes;
+});
+
+serviceSchema.virtual("status").get(function () {
+  return this.isActive ? "active" : "inactive";
+});
 
 serviceSchema.index({ title: "text", description: "text" });
 serviceSchema.index({ category: 1, price: 1, isActive: 1 });

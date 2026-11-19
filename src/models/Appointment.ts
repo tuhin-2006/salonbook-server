@@ -13,6 +13,7 @@ export interface IAppointment extends Document {
   status: AppointmentStatus;
   transactionId?: Types.ObjectId;
   notes?: string;
+  message?: string;
   cancelledAt?: Date;
   stripeSessionId?: string;
   createdAt: Date;
@@ -96,6 +97,10 @@ appointmentSchema.virtual("price").get(function () {
 
 appointmentSchema.virtual("date").get(function () {
   return this.appointmentDate;
+});
+
+appointmentSchema.virtual("message").get(function () {
+  return this.notes;
 });
 
 // Prevent double bookings on active (pending/confirmed) slots

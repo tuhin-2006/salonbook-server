@@ -65,11 +65,18 @@ export const bookAppointment = asyncHandler(
       throw new ApiError(401, "Authentication required. Please sign in to book an appointment.");
     }
 
-    if (
-      req.user.role !== USER_ROLES.CUSTOMER &&
-      req.user.role !== USER_ROLES.ADMIN
-    ) {
-      throw new ApiError(403, "Only registered customers can submit appointment requests.");
+    if (req.user.role === USER_ROLES.ADMIN) {
+      throw new ApiError(
+        403,
+        "Admins cannot submit customer appointment requests. Please use a patron account."
+      );
+    }
+
+    if (req.user.role !== USER_ROLES.CUSTOMER) {
+      throw new ApiError(
+        403,
+        "Only registered customers can submit appointment requests."
+      );
     }
 
     const { serviceId, appointmentDate, timeSlot, notes } = req.body;
@@ -321,6 +328,14 @@ export const deleteAppointment = asyncHandler(
 
     if (!appointment) {
       throw new ApiError(404, "Appointment not found.");
+    }
+
+    // Protection rule: Paid appointments cannot be deleted to preserve financial audit trail
+    if (appointment.paymentStatus === PAYMENT_STATUS.PAID) {
+      throw new ApiError(
+        400,
+        "Paid appointments cannot be deleted to preserve financial audit and transaction records."
+      );
     }
 
     // Customer can only delete their own appointments; Admin can delete any
