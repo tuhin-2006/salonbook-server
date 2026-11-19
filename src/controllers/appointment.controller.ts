@@ -228,7 +228,7 @@ export const getAllAppointments = asyncHandler(
     const [appointments, total] = await Promise.all([
       Appointment.find(query)
         .populate("customerId", "name email phone image")
-        .populate("serviceId", "title category price durationMinutes")
+        .populate("serviceId", "title category price durationMinutes images")
         .populate("transactionId", "amount status stripeSessionId")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -263,6 +263,30 @@ export const updateAppointmentStatus = asyncHandler(
       throw new ApiError(400, "Invalid appointment status.");
     }
 
+    const currentAppointment = await Appointment.findById(id);
+    if (!currentAppointment) {
+      throw new ApiError(404, "Appointment not found.");
+    }
+
+    // Rule: Only pending appointments can be confirmed
+    if (
+      status === APPOINTMENT_STATUS.CONFIRMED &&
+      currentAppointment.status !== APPOINTMENT_STATUS.PENDING
+    ) {
+      throw new ApiError(
+        400,
+        "Only pending appointments can be confirmed. This appointment has already been processed."
+      );
+    }
+
+    // Rule: Admin can cancel pending or confirmed appointments
+    if (
+      status === APPOINTMENT_STATUS.CANCELLED &&
+      currentAppointment.status === APPOINTMENT_STATUS.CANCELLED
+    ) {
+      throw new ApiError(400, "This appointment is already cancelled.");
+    }
+
     const updatePayload: Record<string, unknown> = { status };
     if (status === APPOINTMENT_STATUS.CANCELLED) {
       updatePayload.cancelledAt = new Date();
@@ -272,11 +296,9 @@ export const updateAppointmentStatus = asyncHandler(
       id,
       updatePayload,
       { new: true }
-    );
-
-    if (!appointment) {
-      throw new ApiError(404, "Appointment not found.");
-    }
+    )
+      .populate("customerId", "name email phone image")
+      .populate("serviceId", "title category price durationMinutes images");
 
     res.status(200).json(
       new ApiResponse(

@@ -97,6 +97,36 @@ export const getUsers = asyncHandler(
   }
 );
 
+export const getUserById = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+
+    const [appointmentsCount, recentAppointments] = await Promise.all([
+      Appointment.countDocuments({ customerId: id }),
+      Appointment.find({ customerId: id })
+        .populate("serviceId", "title category price durationMinutes images")
+        .sort({ createdAt: -1 })
+        .limit(10),
+    ]);
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          user,
+          appointmentsCount,
+          recentAppointments,
+        },
+        "User dossier retrieved successfully."
+      )
+    );
+  }
+);
+
 export const blockUser = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;

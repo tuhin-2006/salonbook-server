@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getAnalytics,
   getUsers,
+  getUserById,
   blockUser,
   unblockUser,
 } from "../controllers/admin.controller";
@@ -15,6 +16,7 @@ router.use(authenticate, requireAdmin);
 
 router.get("/analytics", getAnalytics);
 router.get("/users", getUsers);
+router.get("/users/:id", getUserById);
 router.patch("/users/:id/block", blockUser);
 router.patch("/users/:id/unblock", unblockUser);
 
