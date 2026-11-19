@@ -21,9 +21,22 @@ export const getServices = asyncHandler(async (req: Request, res: Response) => {
     sortPrice,
     page = "1",
     limit = "12",
+    isActive,
   } = req.query;
 
-  const query: Record<string, unknown> = { isActive: true };
+  const query: Record<string, unknown> = {};
+
+  // Support isActive filtering:
+  // "all" -> returns both active and archived (used by Admin Carte management)
+  // "false" -> returns only archived/inactive
+  // default / "true" -> returns only active (used by public booking catalog)
+  if (isActive === "all") {
+    // No isActive restriction
+  } else if (isActive === "false") {
+    query.isActive = false;
+  } else {
+    query.isActive = true;
+  }
 
   if (category && category !== "All") {
     query.category = category;

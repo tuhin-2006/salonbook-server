@@ -15,6 +15,11 @@ export const createServiceSchema = z.object({
 });
 
 export const updateServiceSchema = z.object({
+  params: z
+    .object({
+      id: z.string().optional(),
+    })
+    .optional(),
   body: z.object({
     title: z.string().min(3).max(150).optional(),
     category: z.enum(SERVICE_CATEGORIES as unknown as [string, ...string[]]).optional(),
