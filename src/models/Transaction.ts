@@ -6,6 +6,7 @@ export interface ITransaction extends Document {
   appointmentId: Types.ObjectId;
   stripeSessionId: string;
   stripePaymentIntentId?: string;
+  invoiceNumber?: string;
   amount: number;
   currency: string;
   status: TransactionStatus;
@@ -37,6 +38,13 @@ const transactionSchema = new Schema<ITransaction>(
       type: String,
       trim: true,
       default: "",
+    },
+    invoiceNumber: {
+      type: String,
+      trim: true,
+      default: function () {
+        return `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      },
     },
     amount: {
       type: Number,

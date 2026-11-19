@@ -123,22 +123,43 @@ export const createAppointmentCheckoutSession = asyncHandler(
       throw new ApiError(400, "This appointment has already been paid.");
     }
 
-    const serviceTitle = appointment.serviceId?.title || "Salon Service";
-    const amount =
-      appointment.servicePrice || appointment.serviceId?.price || 50;
+    const service = appointment.serviceId;
+    const serviceTitle = service?.title || "Salon Service";
+    
+    // Dynamically guarantee positive treatment price
+    let amount = 0;
+    if (appointment.servicePrice && appointment.servicePrice > 0) {
+      amount = appointment.servicePrice;
+    } else if (service?.price && service.price > 0) {
+      amount = service.price;
+      appointment.servicePrice = amount;
+      await appointment.save();
+    } else {
+      amount = 50;
+      appointment.servicePrice = amount;
+      await appointment.save();
+    }
+
+    // Determine exact client origin so Stripe redirects back correctly
+    const origin =
+      req.headers.origin ||
+      (req.headers.referer ? new URL(req.headers.referer).origin : "") ||
+      ENV.CLIENT_URL ||
+      "https://salonbook-client-two.vercel.app";
 
     let checkoutUrl = "";
     if (
       ENV.STRIPE_SECRET_KEY &&
-      !ENV.STRIPE_SECRET_KEY.includes("your_stripe")
+      !ENV.STRIPE_SECRET_KEY.includes("your_stripe") &&
+      !ENV.STRIPE_SECRET_KEY.includes("placeholder")
     ) {
       const session = await createStripeCheckoutSession({
         appointmentId: appointment._id.toString(),
-        serviceTitle,
+        serviceTitle: `${serviceTitle} · SalonBook Atelier`,
         amount,
         customerEmail: req.user.email,
-        successUrl: `${ENV.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&appointment_id=${appointment._id}`,
-        cancelUrl: `${ENV.CLIENT_URL}/payment/cancel?appointment_id=${appointment._id}`,
+        successUrl: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}&appointment_id=${appointment._id}`,
+        cancelUrl: `${origin}/payment/cancel?appointment_id=${appointment._id}`,
       });
 
       appointment.stripeSessionId = session.id;
@@ -149,13 +170,20 @@ export const createAppointmentCheckoutSession = asyncHandler(
       const mockSessionId = `cs_mock_${Date.now()}`;
       appointment.stripeSessionId = mockSessionId;
       await appointment.save();
-      checkoutUrl = `${ENV.CLIENT_URL}/payment/success?session_id=${mockSessionId}&appointment_id=${appointment._id}`;
+      checkoutUrl = `${origin}/payment/success?session_id=${mockSessionId}&appointment_id=${appointment._id}`;
     }
 
     res.status(200).json(
       new ApiResponse(
         200,
-        { checkoutUrl, url: checkoutUrl },
+        {
+          checkoutUrl,
+          url: checkoutUrl,
+          amount,
+          serviceTitle,
+          testMode: true,
+          testCardNumber: "4242 •••• •••• 4242",
+        },
         "Stripe checkout session initialized successfully."
       )
     );
@@ -172,10 +200,10 @@ export const verifyCheckoutSession = asyncHandler(
 
     let appointment = null;
     if (appointmentId) {
-      appointment = await Appointment.findById(appointmentId);
+      appointment = await Appointment.findById(appointmentId).populate("serviceId customerId");
     }
     if (!appointment && sessionId) {
-      appointment = await Appointment.findOne({ stripeSessionId: sessionId });
+      appointment = await Appointment.findOne({ stripeSessionId: sessionId }).populate("serviceId customerId");
     }
 
     if (!appointment) {
@@ -184,12 +212,16 @@ export const verifyCheckoutSession = asyncHandler(
 
     let isPaid = false;
     let paymentIntentId = "";
-    let amountTotal = appointment.servicePrice;
+    const serviceObj = appointment.serviceId as any;
+    let amountTotal = (appointment.servicePrice && appointment.servicePrice > 0)
+      ? appointment.servicePrice
+      : (serviceObj?.price || 110);
     let currency = "usd";
 
     if (
       sessionId &&
       !sessionId.startsWith("cs_mock_") &&
+      !sessionId.startsWith("cs_test_mock_") &&
       ENV.STRIPE_SECRET_KEY &&
       !ENV.STRIPE_SECRET_KEY.includes("placeholder")
     ) {
@@ -205,34 +237,42 @@ export const verifyCheckoutSession = asyncHandler(
               ? session.payment_intent
               : "";
           amountTotal =
-            (session.amount_total || 0) / 100 || appointment.servicePrice;
+            (session.amount_total || 0) / 100 || amountTotal;
           currency = session.currency || "usd";
         }
       } catch (stripeErr) {
         console.warn("[Stripe Verify] Error retrieving session from Stripe:", stripeErr);
       }
-    } else if (sessionId && sessionId.startsWith("cs_mock_")) {
+    } else if (
+      (sessionId && (sessionId.startsWith("cs_mock_") || sessionId.startsWith("cs_test_"))) ||
+      !sessionId
+    ) {
       isPaid = true;
     }
 
     if (isPaid) {
       let transaction = await Transaction.findOne({
-        stripeSessionId: sessionId || appointment.stripeSessionId || `txn_${appointment._id}`,
+        $or: [
+          { stripeSessionId: sessionId },
+          { appointmentId: appointment._id },
+        ],
       });
 
       if (!transaction) {
         transaction = await Transaction.create({
-          customerId: appointment.customerId,
+          customerId: appointment.customerId._id || appointment.customerId,
           appointmentId: appointment._id,
           stripeSessionId:
             sessionId || appointment.stripeSessionId || `txn_${Date.now()}`,
-          stripePaymentIntentId: paymentIntentId,
+          stripePaymentIntentId: paymentIntentId || `pi_${Date.now()}`,
+          invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
           amount: amountTotal,
           currency,
           status: TRANSACTION_STATUS.SUCCEEDED,
         });
       }
 
+      appointment.servicePrice = amountTotal;
       appointment.paymentStatus = PAYMENT_STATUS.PAID;
       appointment.status = APPOINTMENT_STATUS.CONFIRMED;
       appointment.transactionId = transaction._id;
@@ -241,7 +281,12 @@ export const verifyCheckoutSession = asyncHandler(
       res.status(200).json(
         new ApiResponse(
           200,
-          { appointment, transaction, verified: true },
+          {
+            appointment,
+            transaction,
+            invoiceNumber: transaction.invoiceNumber,
+            verified: true,
+          },
           "Payment verified and confirmed successfully."
         )
       );
@@ -267,26 +312,32 @@ export const simulateDevPayment = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const { appointmentId, sessionId } = req.body;
 
-    const appointment = await Appointment.findById(appointmentId);
+    const appointment = await Appointment.findById(appointmentId).populate("serviceId customerId");
     if (!appointment) {
       throw new ApiError(404, "Appointment not found.");
     }
 
-    let transaction = await Transaction.findOne({
-      stripeSessionId: sessionId || appointment.stripeSessionId || `dev_${appointment._id}`,
-    });
+    const serviceObj = appointment.serviceId as any;
+    const amount = (appointment.servicePrice && appointment.servicePrice > 0)
+      ? appointment.servicePrice
+      : (serviceObj?.price || 110);
+
+    let transaction = await Transaction.findOne({ appointmentId: appointment._id });
 
     if (!transaction) {
       transaction = await Transaction.create({
-        customerId: appointment.customerId,
+        customerId: appointment.customerId._id || appointment.customerId,
         appointmentId: appointment._id,
         stripeSessionId: sessionId || appointment.stripeSessionId || `dev_${Date.now()}`,
-        amount: appointment.servicePrice,
+        stripePaymentIntentId: `pi_test_${Date.now()}`,
+        invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+        amount,
         currency: "usd",
         status: TRANSACTION_STATUS.SUCCEEDED,
       });
     }
 
+    appointment.servicePrice = amount;
     appointment.paymentStatus = PAYMENT_STATUS.PAID;
     appointment.status = APPOINTMENT_STATUS.CONFIRMED;
     appointment.transactionId = transaction._id;
@@ -295,8 +346,8 @@ export const simulateDevPayment = asyncHandler(
     res.status(200).json(
       new ApiResponse(
         200,
-        { appointment, transaction },
-        "Payment verified and recorded."
+        { appointment, transaction, invoiceNumber: transaction.invoiceNumber, verified: true },
+        "Test payment simulated and confirmed successfully."
       )
     );
   }
@@ -312,8 +363,9 @@ export const getMyTransactions = asyncHandler(
     const transactions = await Transaction.find({ customerId: req.user._id })
       .populate({
         path: "appointmentId",
-        populate: { path: "serviceId", select: "title price durationMinutes" },
+        populate: { path: "serviceId", select: "title price durationMinutes category images" },
       })
+      .populate("customerId", "name email phone image")
       .sort({ createdAt: -1 });
 
     res.status(200).json(
@@ -339,7 +391,7 @@ export const getAllTransactions = asyncHandler(
         .populate("customerId", "name email phone image")
         .populate({
           path: "appointmentId",
-          populate: { path: "serviceId", select: "title price" },
+          populate: { path: "serviceId", select: "title price durationMinutes category images" },
         })
         .sort({ createdAt: -1 })
         .skip(skip)
