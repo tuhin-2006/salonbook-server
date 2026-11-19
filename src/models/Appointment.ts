@@ -87,7 +87,11 @@ const appointmentSchema = new Schema<IAppointment>(
 
 // Virtual field mappings for frontend compatibility
 appointmentSchema.virtual("price").get(function () {
-  return this.servicePrice;
+  if (this.servicePrice && this.servicePrice > 0) return this.servicePrice;
+  if (this.serviceId && typeof this.serviceId === "object" && (this.serviceId as any).price > 0) {
+    return (this.serviceId as any).price;
+  }
+  return this.servicePrice || 0;
 });
 
 appointmentSchema.virtual("date").get(function () {
