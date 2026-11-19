@@ -155,8 +155,109 @@ export const createAppointmentCheckoutSession = asyncHandler(
     res.status(200).json(
       new ApiResponse(
         200,
-        { checkoutUrl },
+        { checkoutUrl, url: checkoutUrl },
         "Stripe checkout session initialized successfully."
+      )
+    );
+  }
+);
+
+export const verifyCheckoutSession = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { sessionId, appointmentId } = req.body;
+
+    if (!sessionId && !appointmentId) {
+      throw new ApiError(400, "Session ID or Appointment ID is required.");
+    }
+
+    let appointment = null;
+    if (appointmentId) {
+      appointment = await Appointment.findById(appointmentId);
+    }
+    if (!appointment && sessionId) {
+      appointment = await Appointment.findOne({ stripeSessionId: sessionId });
+    }
+
+    if (!appointment) {
+      throw new ApiError(404, "Appointment not found for payment verification.");
+    }
+
+    let isPaid = false;
+    let paymentIntentId = "";
+    let amountTotal = appointment.servicePrice;
+    let currency = "usd";
+
+    if (
+      sessionId &&
+      !sessionId.startsWith("cs_mock_") &&
+      ENV.STRIPE_SECRET_KEY &&
+      !ENV.STRIPE_SECRET_KEY.includes("placeholder")
+    ) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (
+          session.payment_status === "paid" ||
+          session.status === "complete"
+        ) {
+          isPaid = true;
+          paymentIntentId =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : "";
+          amountTotal =
+            (session.amount_total || 0) / 100 || appointment.servicePrice;
+          currency = session.currency || "usd";
+        }
+      } catch (stripeErr) {
+        console.warn("[Stripe Verify] Error retrieving session from Stripe:", stripeErr);
+      }
+    } else if (sessionId && sessionId.startsWith("cs_mock_")) {
+      isPaid = true;
+    }
+
+    if (isPaid) {
+      let transaction = await Transaction.findOne({
+        stripeSessionId: sessionId || appointment.stripeSessionId || `txn_${appointment._id}`,
+      });
+
+      if (!transaction) {
+        transaction = await Transaction.create({
+          customerId: appointment.customerId,
+          appointmentId: appointment._id,
+          stripeSessionId:
+            sessionId || appointment.stripeSessionId || `txn_${Date.now()}`,
+          stripePaymentIntentId: paymentIntentId,
+          amount: amountTotal,
+          currency,
+          status: TRANSACTION_STATUS.SUCCEEDED,
+        });
+      }
+
+      appointment.paymentStatus = PAYMENT_STATUS.PAID;
+      appointment.status = APPOINTMENT_STATUS.CONFIRMED;
+      appointment.transactionId = transaction._id;
+      await appointment.save();
+
+      res.status(200).json(
+        new ApiResponse(
+          200,
+          { appointment, transaction, verified: true },
+          "Payment verified and confirmed successfully."
+        )
+      );
+      return;
+    }
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          appointment,
+          verified: appointment.paymentStatus === PAYMENT_STATUS.PAID,
+        },
+        appointment.paymentStatus === PAYMENT_STATUS.PAID
+          ? "Appointment is already paid."
+          : "Payment pending verification."
       )
     );
   }

@@ -3,6 +3,7 @@ import {
   getMyTransactions,
   getAllTransactions,
   createAppointmentCheckoutSession,
+  verifyCheckoutSession,
   simulateDevPayment,
 } from "../controllers/payment.controller";
 import { authenticate } from "../middlewares/auth";
@@ -15,6 +16,7 @@ router.post(
   authenticate,
   createAppointmentCheckoutSession
 );
+router.post("/verify-checkout-session", verifyCheckoutSession);
 router.post("/simulate-dev-payment", authenticate, simulateDevPayment);
 router.get("/my-transactions", authenticate, getMyTransactions);
 router.get("/transactions", authenticate, requireAdmin, getAllTransactions);

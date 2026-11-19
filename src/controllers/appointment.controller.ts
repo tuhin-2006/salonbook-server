@@ -62,21 +62,28 @@ export const checkAvailability = asyncHandler(
 export const bookAppointment = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) {
-      throw new ApiError(401, "Authentication required.");
+      throw new ApiError(401, "Authentication required. Please sign in to book an appointment.");
+    }
+
+    if (
+      req.user.role !== USER_ROLES.CUSTOMER &&
+      req.user.role !== USER_ROLES.ADMIN
+    ) {
+      throw new ApiError(403, "Only registered customers can submit appointment requests.");
     }
 
     const { serviceId, appointmentDate, timeSlot, notes } = req.body;
 
     const service = await Service.findById(serviceId);
-    if (!service || !service.isActive) {
-      throw new ApiError(404, "Selected service is no longer available.");
+    if (!service || service.isActive === false) {
+      throw new ApiError(400, "Cannot book an inactive or archived service.");
     }
 
     const targetDate = new Date(appointmentDate);
     targetDate.setUTCHours(0, 0, 0, 0);
 
-    // Double-booking check
-    const existingBooking = await Appointment.findOne({
+    // 1. Prevent duplicate active appointments for the service on the same date and slot
+    const existingServiceBooking = await Appointment.findOne({
       serviceId,
       appointmentDate: targetDate,
       timeSlot,
@@ -85,13 +92,31 @@ export const bookAppointment = asyncHandler(
       },
     });
 
-    if (existingBooking) {
+    if (existingServiceBooking) {
       throw new ApiError(
         409,
-        "This time slot is already booked. Please choose another slot."
+        "This time slot is already reserved for this service. Please choose another time slot."
       );
     }
 
+    // 2. Prevent duplicate active appointments for the customer on the same date and slot
+    const customerConflict = await Appointment.findOne({
+      customerId: req.user._id,
+      appointmentDate: targetDate,
+      timeSlot,
+      status: {
+        $in: [APPOINTMENT_STATUS.PENDING, APPOINTMENT_STATUS.CONFIRMED],
+      },
+    });
+
+    if (customerConflict) {
+      throw new ApiError(
+        409,
+        "You already have an active appointment scheduled for this date and time slot."
+      );
+    }
+
+    // 3. Create appointment in appointments collection with default Pending and Unpaid statuses
     const appointment = await Appointment.create({
       customerId: req.user._id,
       serviceId: service._id,
@@ -99,8 +124,8 @@ export const bookAppointment = asyncHandler(
       timeSlot,
       servicePrice: service.price,
       paymentStatus: PAYMENT_STATUS.UNPAID,
-      notes: notes || "",
       status: APPOINTMENT_STATUS.PENDING,
+      notes: notes || "",
     });
 
     res.status(201).json(
@@ -238,9 +263,14 @@ export const updateAppointmentStatus = asyncHandler(
       throw new ApiError(400, "Invalid appointment status.");
     }
 
+    const updatePayload: Record<string, unknown> = { status };
+    if (status === APPOINTMENT_STATUS.CANCELLED) {
+      updatePayload.cancelledAt = new Date();
+    }
+
     const appointment = await Appointment.findByIdAndUpdate(
       id,
-      { status },
+      updatePayload,
       { new: true }
     );
 
