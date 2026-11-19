@@ -22,12 +22,21 @@ export const uploadToImgBB = async (
       `https://api.imgbb.com/1/upload?key=${ENV.IMGBB_API_KEY}`,
       formData,
       {
-        headers: formData.getHeaders(),
+        headers: {
+          ...formData.getHeaders(),
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        },
+        timeout: 20000,
       }
     );
 
-    if (response.data && response.data.data && response.data.data.url) {
-      return response.data.data.url as string;
+    const imageUrl =
+      response.data?.data?.display_url || response.data?.data?.url;
+
+    if (imageUrl) {
+      console.log(`[ImgBB Service] Successfully uploaded image: ${imageUrl}`);
+      return imageUrl as string;
     }
 
     throw new ApiError(500, "Failed to parse image URL from ImgBB response.");
