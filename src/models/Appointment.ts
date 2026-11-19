@@ -5,8 +5,10 @@ export interface IAppointment extends Document {
   customerId: Types.ObjectId;
   serviceId: Types.ObjectId;
   appointmentDate: Date;
+  date?: Date;
   timeSlot: string;
   servicePrice: number;
+  price?: number;
   paymentStatus: PaymentStatus;
   status: AppointmentStatus;
   transactionId?: Types.ObjectId;
@@ -78,8 +80,19 @@ const appointmentSchema = new Schema<IAppointment>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Virtual field mappings for frontend compatibility
+appointmentSchema.virtual("price").get(function () {
+  return this.servicePrice;
+});
+
+appointmentSchema.virtual("date").get(function () {
+  return this.appointmentDate;
+});
 
 // Prevent double bookings on active (pending/confirmed) slots
 appointmentSchema.index(
