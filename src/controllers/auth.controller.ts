@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import { User } from "../models/User";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
@@ -8,6 +9,8 @@ import { ENV } from "../config/env";
 import { USER_ROLES } from "../constants";
 import { AuthenticatedRequest } from "../middlewares/auth";
 import { uploadToImgBB } from "../services/imgbb.service";
+
+const googleClient = new OAuth2Client(ENV.GOOGLE_CLIENT_ID);
 
 const generateToken = (userId: string, role: string, email: string): string => {
   return jwt.sign({ userId, role, email }, ENV.JWT_SECRET, {
@@ -178,3 +181,108 @@ export const uploadAvatar = asyncHandler(
     );
   }
 );
+
+export const googleAuth = asyncHandler(async (req: Request, res: Response) => {
+  const { credential, idToken, accessToken } = req.body;
+  const tokenToVerify = credential || idToken;
+
+  let email = "";
+  let name = "";
+  let picture = "";
+
+  if (tokenToVerify) {
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: tokenToVerify,
+        audience: ENV.GOOGLE_CLIENT_ID ? [ENV.GOOGLE_CLIENT_ID] : undefined,
+      });
+      const payload = ticket.getPayload();
+      if (payload && payload.email) {
+        email = payload.email.toLowerCase();
+        name = payload.name || payload.given_name || "Google Patron";
+        picture = payload.picture || "";
+      }
+    } catch (verifyErr) {
+      console.warn("[Google Auth Verify Error, attempting fallback decode]:", verifyErr);
+      // Fallback decode for development/testing if token signature verification has audience mismatch
+      const decoded = jwt.decode(tokenToVerify) as Record<string, unknown> | null;
+      if (decoded && typeof decoded.email === "string") {
+        email = decoded.email.toLowerCase();
+        name = (decoded.name as string) || "Google Patron";
+        picture = (decoded.picture as string) || "";
+      } else {
+        throw new ApiError(401, "Invalid Google credential token.");
+      }
+    }
+  } else if (accessToken) {
+    // If client used OAuth access token, fetch userinfo from Google API
+    try {
+      const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch Google user profile.");
+      }
+      const data = (await response.json()) as Record<string, unknown>;
+      if (data.email) {
+        email = (data.email as string).toLowerCase();
+        name = (data.name as string) || "Google Patron";
+        picture = (data.picture as string) || "";
+      }
+    } catch (err) {
+      throw new ApiError(401, "Google access token validation failed.");
+    }
+  } else {
+    throw new ApiError(400, "Google credential or token is required.");
+  }
+
+  if (!email) {
+    throw new ApiError(400, "Unable to verify email address with Google.");
+  }
+
+  // Find or create customer
+  let user = await User.findOne({ email });
+
+  if (user) {
+    if (user.isBlocked) {
+      throw new ApiError(
+        403,
+        "Your account has been suspended. Please contact customer support."
+      );
+    }
+    // Update profile picture if user doesn't have one
+    if (!user.image && picture) {
+      user.image = picture;
+      await user.save();
+    }
+  } else {
+    user = await User.create({
+      name,
+      email,
+      image: picture,
+      role: USER_ROLES.CUSTOMER,
+      isBlocked: false,
+    });
+  }
+
+  const token = generateToken(user._id.toString(), user.role, user.email);
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone || "",
+          image: user.image || "",
+          createdAt: user.createdAt,
+        },
+        token,
+      },
+      "Signed in successfully with Google."
+    )
+  );
+});

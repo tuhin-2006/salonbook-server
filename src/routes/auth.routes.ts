@@ -3,6 +3,7 @@ import multer from "multer";
 import {
   register,
   login,
+  googleAuth,
   getMe,
   updateProfile,
   uploadAvatar,
@@ -25,6 +26,7 @@ const router = Router();
 
 router.post("/register", authLimiter, validateRequest(registerSchema), register);
 router.post("/login", authLimiter, validateRequest(loginSchema), login);
+router.post("/google", authLimiter, googleAuth);
 router.get("/me", authenticate, getMe);
 router.patch(
   "/profile",
