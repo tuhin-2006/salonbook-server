@@ -6,6 +6,7 @@ import {
   cancelAppointment,
   getAllAppointments,
   updateAppointmentStatus,
+  deleteAppointment,
 } from "../controllers/appointment.controller";
 import { authenticate } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/rbac";
@@ -33,6 +34,9 @@ router.post(
 );
 router.get("/my", authenticate, getMyAppointments);
 router.patch("/:id/cancel", authenticate, cancelAppointment);
+
+// Shared delete route (Customer can delete own, Admin can delete any)
+router.delete("/:id", authenticate, deleteAppointment);
 
 // Admin-only appointment routes
 router.get("/", authenticate, requireAdmin, getAllAppointments);

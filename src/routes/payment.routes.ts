@@ -5,6 +5,7 @@ import {
   createAppointmentCheckoutSession,
   verifyCheckoutSession,
   simulateDevPayment,
+  deleteTransaction,
 } from "../controllers/payment.controller";
 import { authenticate } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/rbac";
@@ -20,5 +21,6 @@ router.post("/verify-checkout-session", verifyCheckoutSession);
 router.post("/simulate-dev-payment", authenticate, simulateDevPayment);
 router.get("/my-transactions", authenticate, getMyTransactions);
 router.get("/transactions", authenticate, requireAdmin, getAllTransactions);
+router.delete("/transactions/:id", authenticate, requireAdmin, deleteTransaction);
 
 export default router;

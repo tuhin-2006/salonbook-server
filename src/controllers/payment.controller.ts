@@ -416,3 +416,24 @@ export const getAllTransactions = asyncHandler(
     );
   }
 );
+
+export const deleteTransaction = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Authentication required.");
+    }
+
+    const { id } = req.params;
+    const transaction = await Transaction.findById(id);
+
+    if (!transaction) {
+      throw new ApiError(404, "Transaction not found.");
+    }
+
+    await Transaction.findByIdAndDelete(id);
+
+    res.status(200).json(
+      new ApiResponse(200, null, "Transaction deleted successfully.")
+    );
+  }
+);

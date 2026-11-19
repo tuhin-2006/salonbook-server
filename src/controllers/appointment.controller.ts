@@ -147,7 +147,7 @@ export const getMyAppointments = asyncHandler(
     const appointments = await Appointment.find({ customerId: req.user._id })
       .populate("serviceId", "title category price durationMinutes images")
       .populate("transactionId", "amount status stripeSessionId createdAt")
-      .sort({ appointmentDate: -1, createdAt: -1 });
+      .sort({ createdAt: -1 });
 
     res.status(200).json(
       new ApiResponse(
@@ -230,7 +230,7 @@ export const getAllAppointments = asyncHandler(
         .populate("customerId", "name email phone image")
         .populate("serviceId", "title category price durationMinutes")
         .populate("transactionId", "amount status stripeSessionId")
-        .sort({ appointmentDate: -1, createdAt: -1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
       Appointment.countDocuments(query),
@@ -284,6 +284,38 @@ export const updateAppointmentStatus = asyncHandler(
         appointment,
         `Appointment status updated to ${status}.`
       )
+    );
+  }
+);
+
+export const deleteAppointment = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Authentication required.");
+    }
+
+    const { id } = req.params;
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+      throw new ApiError(404, "Appointment not found.");
+    }
+
+    // Customer can only delete their own appointments; Admin can delete any
+    if (
+      req.user.role !== USER_ROLES.ADMIN &&
+      !appointment.customerId.equals(req.user._id)
+    ) {
+      throw new ApiError(
+        403,
+        "Access denied. You can only delete your own appointments."
+      );
+    }
+
+    await Appointment.findByIdAndDelete(id);
+
+    res.status(200).json(
+      new ApiResponse(200, null, "Appointment deleted successfully.")
     );
   }
 );
