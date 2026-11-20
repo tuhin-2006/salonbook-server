@@ -190,19 +190,12 @@ export const cancelAppointment = asyncHandler(
       );
     }
 
-    // Customer Action Rule: Only allowed on pending appointments
-    if (
-      req.user.role !== USER_ROLES.ADMIN &&
-      appointment.status !== APPOINTMENT_STATUS.PENDING
-    ) {
+    // Action Rule: Only pending appointments can be cancelled
+    if (appointment.status !== APPOINTMENT_STATUS.PENDING) {
       throw new ApiError(
         400,
         "Only pending appointments can be cancelled. Confirmed appointments cannot be cancelled."
       );
-    }
-
-    if (appointment.status === APPOINTMENT_STATUS.CANCELLED) {
-      throw new ApiError(400, "This appointment is already cancelled.");
     }
 
     appointment.status = APPOINTMENT_STATUS.CANCELLED;
@@ -286,12 +279,15 @@ export const updateAppointmentStatus = asyncHandler(
       );
     }
 
-    // Rule: Admin can cancel pending or confirmed appointments
+    // Rule: Only pending appointments can be cancelled
     if (
       status === APPOINTMENT_STATUS.CANCELLED &&
-      currentAppointment.status === APPOINTMENT_STATUS.CANCELLED
+      currentAppointment.status !== APPOINTMENT_STATUS.PENDING
     ) {
-      throw new ApiError(400, "This appointment is already cancelled.");
+      throw new ApiError(
+        400,
+        "Only pending appointments can be cancelled. Confirmed appointments cannot be cancelled."
+      );
     }
 
     const updatePayload: Record<string, unknown> = { status };

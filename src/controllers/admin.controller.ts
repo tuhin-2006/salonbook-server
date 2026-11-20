@@ -170,3 +170,44 @@ export const unblockUser = asyncHandler(
     );
   }
 );
+
+export const updateUserRole = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!role || (role !== USER_ROLES.CUSTOMER && role !== USER_ROLES.ADMIN)) {
+      throw new ApiError(
+        400,
+        "Invalid role specified. Role must be either 'customer' or 'admin'."
+      );
+    }
+
+    if (
+      req.user &&
+      req.user._id.toString() === id &&
+      role !== USER_ROLES.ADMIN
+    ) {
+      throw new ApiError(
+        400,
+        "You cannot remove administrative privileges from your own logged-in account."
+      );
+    }
+
+    const targetUser = await User.findById(id);
+    if (!targetUser) {
+      throw new ApiError(404, "User not found.");
+    }
+
+    targetUser.role = role;
+    await targetUser.save();
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        targetUser,
+        `User role updated to ${role} successfully.`
+      )
+    );
+  }
+);
