@@ -99,9 +99,13 @@ appointmentSchema.virtual("date").get(function () {
   return this.appointmentDate;
 });
 
-appointmentSchema.virtual("message").get(function () {
-  return this.notes;
-});
+appointmentSchema.virtual("message")
+  .get(function () {
+    return this.notes;
+  })
+  .set(function (val: string) {
+    this.notes = val;
+  });
 
 // Prevent double bookings on active (pending/confirmed) slots
 appointmentSchema.index(
@@ -116,5 +120,6 @@ appointmentSchema.index(
 
 export const Appointment = model<IAppointment>(
   "Appointment",
-  appointmentSchema
+  appointmentSchema,
+  "appointments"
 );

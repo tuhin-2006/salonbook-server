@@ -79,7 +79,7 @@ export const bookAppointment = asyncHandler(
       );
     }
 
-    const { serviceId, appointmentDate, timeSlot, notes } = req.body;
+    const { serviceId, appointmentDate, timeSlot, notes, message } = req.body;
 
     const service = await Service.findById(serviceId);
     if (!service || service.isActive === false) {
@@ -132,7 +132,7 @@ export const bookAppointment = asyncHandler(
       servicePrice: service.price,
       paymentStatus: PAYMENT_STATUS.UNPAID,
       status: APPOINTMENT_STATUS.PENDING,
-      notes: notes || "",
+      notes: notes || message || "",
     });
 
     res.status(201).json(

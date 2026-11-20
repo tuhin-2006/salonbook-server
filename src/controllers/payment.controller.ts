@@ -61,7 +61,7 @@ export const handleStripeWebhook = async (
                   : "",
               amount: (session.amount_total || 0) / 100,
               currency: session.currency || "usd",
-              status: TRANSACTION_STATUS.SUCCEEDED,
+              status: TRANSACTION_STATUS.PAID,
             });
           }
 
@@ -76,6 +76,32 @@ export const handleStripeWebhook = async (
         }
       } catch (dbError) {
         console.error("[Stripe Webhook] DB error on webhook processing:", dbError);
+      }
+    }
+  } else if (
+    event.type === "payment_intent.payment_failed" ||
+    event.type === "checkout.session.async_payment_failed"
+  ) {
+    const sessionOrIntent = event.data.object as Record<string, any>;
+    const appointmentId = sessionOrIntent.metadata?.appointmentId;
+    if (appointmentId) {
+      try {
+        const appointment = await Appointment.findById(appointmentId);
+        if (appointment) {
+          await Transaction.create({
+            customerId: appointment.customerId,
+            appointmentId: appointment._id,
+            stripeSessionId: sessionOrIntent.id || `failed_${Date.now()}`,
+            amount: (sessionOrIntent.amount || sessionOrIntent.amount_total || 0) / 100,
+            currency: sessionOrIntent.currency || "usd",
+            status: TRANSACTION_STATUS.FAILED,
+          });
+          console.warn(
+            `[Stripe Webhook] Recorded failed payment transaction for appointment: ${appointment._id}`
+          );
+        }
+      } catch (dbError) {
+        console.error("[Stripe Webhook] Error recording failed payment transaction:", dbError);
       }
     }
   }

@@ -26,6 +26,7 @@ export type PaymentStatus =
 export const TRANSACTION_STATUS = {
   PENDING: "pending",
   SUCCEEDED: "succeeded",
+  PAID: "paid",
   FAILED: "failed",
   REFUNDED: "refunded",
 } as const;

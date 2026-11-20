@@ -178,6 +178,7 @@ export const uploadAvatar = asyncHandler(
         200,
         {
           url: imageUrl,
+          imageUrl,
         },
         "Image uploaded successfully."
       )

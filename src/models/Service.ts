@@ -13,6 +13,7 @@ export interface IService extends Document {
   specialists: string[];
   serviceName?: string;
   duration?: number;
+  image?: string;
   status?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -90,7 +91,11 @@ serviceSchema.virtual("status").get(function () {
   return this.isActive ? "active" : "inactive";
 });
 
+serviceSchema.virtual("image").get(function () {
+  return this.images && this.images.length > 0 ? this.images[0] : "";
+});
+
 serviceSchema.index({ title: "text", description: "text" });
 serviceSchema.index({ category: 1, price: 1, isActive: 1 });
 
-export const Service = model<IService>("Service", serviceSchema);
+export const Service = model<IService>("Service", serviceSchema, "services");

@@ -65,10 +65,20 @@ const transactionSchema = new Schema<ITransaction>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
+transactionSchema.virtual("isPaid").get(function () {
+  return (
+    this.status === TRANSACTION_STATUS.PAID ||
+    this.status === TRANSACTION_STATUS.SUCCEEDED
+  );
+});
+
 export const Transaction = model<ITransaction>(
   "Transaction",
-  transactionSchema
+  transactionSchema,
+  "transactions"
 );

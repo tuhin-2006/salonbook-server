@@ -17,8 +17,13 @@ const slugify = (text: string) =>
 export const getServices = asyncHandler(async (req: Request, res: Response) => {
   const {
     search,
+    serviceName,
+    title,
     category,
     sortPrice,
+    sort,
+    sortBy,
+    order,
     page = "1",
     limit = "12",
     isActive,
@@ -38,21 +43,33 @@ export const getServices = asyncHandler(async (req: Request, res: Response) => {
     query.isActive = true;
   }
 
-  if (category && category !== "All") {
+  if (category && category !== "All" && category !== "All categories") {
     query.category = category;
   }
 
-  if (search && typeof search === "string" && search.trim() !== "") {
+  const searchTerm = (search || serviceName || title) as string | undefined;
+  if (searchTerm && typeof searchTerm === "string" && searchTerm.trim() !== "") {
     query.$or = [
-      { title: { $regex: search.trim(), $options: "i" } },
-      { description: { $regex: search.trim(), $options: "i" } },
+      { title: { $regex: searchTerm.trim(), $options: "i" } },
+      { description: { $regex: searchTerm.trim(), $options: "i" } },
     ];
   }
 
   const sortOptions: Record<string, 1 | -1> = {};
-  if (sortPrice === "asc") {
+  const isAsc =
+    sortPrice === "asc" ||
+    sort === "asc" ||
+    sort === "price-asc" ||
+    (sortBy === "price" && order === "asc");
+  const isDesc =
+    sortPrice === "desc" ||
+    sort === "desc" ||
+    sort === "price-desc" ||
+    (sortBy === "price" && order === "desc");
+
+  if (isAsc) {
     sortOptions.price = 1;
-  } else if (sortPrice === "desc") {
+  } else if (isDesc) {
     sortOptions.price = -1;
   } else {
     sortOptions.createdAt = -1;
@@ -143,16 +160,39 @@ export const createService = asyncHandler(
   async (req: Request, res: Response) => {
     const {
       title,
+      serviceName,
       category,
       description,
       price,
       durationMinutes,
+      duration,
       images,
+      image,
       specialists,
       isActive,
+      status,
     } = req.body;
 
-    let baseSlug = slugify(title);
+    const resolvedTitle = (title || serviceName) as string;
+    if (!resolvedTitle) {
+      throw new ApiError(400, "Service title/name is required.");
+    }
+
+    const resolvedDuration = durationMinutes || duration || 60;
+    const resolvedImages =
+      images && images.length > 0
+        ? images
+        : image
+        ? [image]
+        : [];
+    const resolvedActive =
+      isActive !== undefined
+        ? isActive
+        : status !== undefined
+        ? status === "active"
+        : true;
+
+    let baseSlug = slugify(resolvedTitle);
     let uniqueSlug = baseSlug;
     let counter = 1;
     while (await Service.findOne({ slug: uniqueSlug })) {
@@ -161,15 +201,15 @@ export const createService = asyncHandler(
     }
 
     const service = await Service.create({
-      title,
+      title: resolvedTitle,
       slug: uniqueSlug,
       category,
       description,
       price,
-      durationMinutes,
-      images: images || [],
+      durationMinutes: resolvedDuration,
+      images: resolvedImages,
       specialists: specialists || ["Senior Specialist"],
-      isActive: isActive !== undefined ? isActive : true,
+      isActive: resolvedActive,
     });
 
     res.status(201).json(
@@ -181,8 +221,22 @@ export const createService = asyncHandler(
 export const updateService = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
+    const updates = { ...req.body };
 
-    const service = await Service.findByIdAndUpdate(id, req.body, {
+    if (updates.serviceName && !updates.title) {
+      updates.title = updates.serviceName;
+    }
+    if (updates.duration && !updates.durationMinutes) {
+      updates.durationMinutes = updates.duration;
+    }
+    if (updates.image && (!updates.images || updates.images.length === 0)) {
+      updates.images = [updates.image];
+    }
+    if (updates.status !== undefined && updates.isActive === undefined) {
+      updates.isActive = updates.status === "active";
+    }
+
+    const service = await Service.findByIdAndUpdate(id, updates, {
       new: true,
       runValidators: true,
     });
@@ -248,7 +302,7 @@ export const uploadServiceImage = asyncHandler(
     res.status(200).json(
       new ApiResponse(
         200,
-        { url: imageUrl },
+        { url: imageUrl, imageUrl },
         "Service image uploaded to ImgBB successfully."
       )
     );

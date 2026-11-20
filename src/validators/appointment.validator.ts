@@ -8,6 +8,7 @@ export const bookAppointmentSchema = z.object({
     }),
     timeSlot: z.string().min(1, "Time slot is required"),
     notes: z.string().max(500).optional(),
+    message: z.string().max(500).optional(),
   }),
 });
 
