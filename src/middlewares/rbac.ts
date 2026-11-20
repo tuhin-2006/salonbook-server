@@ -28,3 +28,4 @@ export const authorize = (...roles: UserRole[]) => {
 
 export const requireAdmin = authorize(USER_ROLES.ADMIN);
 export const requireCustomer = authorize(USER_ROLES.CUSTOMER, USER_ROLES.ADMIN);
+export const requireCustomerOnly = authorize(USER_ROLES.CUSTOMER);

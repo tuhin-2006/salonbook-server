@@ -198,6 +198,10 @@ export const verifyCheckoutSession = asyncHandler(
       throw new ApiError(400, "Session ID or Appointment ID is required.");
     }
 
+    if (!sessionId) {
+      throw new ApiError(400, "Stripe Checkout session ID is required for payment verification.");
+    }
+
     let appointment = null;
     if (appointmentId) {
       appointment = await Appointment.findById(appointmentId).populate("serviceId customerId");
@@ -227,6 +231,13 @@ export const verifyCheckoutSession = asyncHandler(
     ) {
       try {
         const session = await stripe.checkout.sessions.retrieve(sessionId);
+        // Verify session metadata matches the target appointment
+        if (
+          session.metadata?.appointmentId &&
+          session.metadata.appointmentId !== appointment._id.toString()
+        ) {
+          throw new ApiError(400, "Stripe session metadata does not match this appointment.");
+        }
         if (
           session.payment_status === "paid" ||
           session.status === "complete"
@@ -240,12 +251,14 @@ export const verifyCheckoutSession = asyncHandler(
             (session.amount_total || 0) / 100 || amountTotal;
           currency = session.currency || "usd";
         }
-      } catch (stripeErr) {
+      } catch (stripeErr: any) {
         console.warn("[Stripe Verify] Error retrieving session from Stripe:", stripeErr);
+        if (stripeErr instanceof ApiError) throw stripeErr;
       }
     } else if (
-      (sessionId && (sessionId.startsWith("cs_mock_") || sessionId.startsWith("cs_test_"))) ||
-      !sessionId
+      ENV.NODE_ENV !== "production" &&
+      sessionId &&
+      (sessionId.startsWith("cs_mock_") || sessionId.startsWith("cs_test_"))
     ) {
       isPaid = true;
     }
@@ -310,6 +323,9 @@ export const verifyCheckoutSession = asyncHandler(
 
 export const simulateDevPayment = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
+    if (ENV.NODE_ENV === "production") {
+      throw new ApiError(403, "Payment simulation is disabled in production.");
+    }
     const { appointmentId, sessionId } = req.body;
 
     const appointment = await Appointment.findById(appointmentId).populate("serviceId customerId");

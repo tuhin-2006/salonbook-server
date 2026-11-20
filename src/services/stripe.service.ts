@@ -24,8 +24,12 @@ export const createStripeCheckoutSession = async ({
   successUrl: string;
   cancelUrl: string;
 }): Promise<Stripe.Checkout.Session> => {
-  if (!ENV.STRIPE_SECRET_KEY) {
-    throw new Error("STRIPE_SECRET_KEY is not configured on the server.");
+  if (
+    !ENV.STRIPE_SECRET_KEY ||
+    ENV.STRIPE_SECRET_KEY.includes("placeholder") ||
+    ENV.STRIPE_SECRET_KEY.includes("your_stripe")
+  ) {
+    throw new Error("STRIPE_SECRET_KEY is not configured with a valid key on the server.");
   }
 
   // Convert amount to cents

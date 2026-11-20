@@ -47,13 +47,13 @@ const serviceSchema = new Schema<IService>(
     price: {
       type: Number,
       required: [true, "Price is required"],
-      min: [0, "Price cannot be negative"],
+      min: [0.01, "Price must be a positive number greater than 0"],
       index: true,
     },
     durationMinutes: {
       type: Number,
       required: [true, "Duration is required"],
-      min: [15, "Minimum duration is 15 minutes"],
+      min: [1, "Duration must be a positive number greater than 0"],
       default: 60,
     },
     images: {
