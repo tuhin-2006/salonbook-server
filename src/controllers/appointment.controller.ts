@@ -229,7 +229,7 @@ export const getAllAppointments = asyncHandler(
       Appointment.find(query)
         .populate("customerId", "name email phone image")
         .populate("serviceId", "title category price durationMinutes images")
-        .populate("transactionId", "amount status stripeSessionId")
+        .populate("transactionId", "amount status stripeSessionId invoiceNumber")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),

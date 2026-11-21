@@ -422,14 +422,26 @@ export const getMyTransactions = asyncHandler(
 
 export const getAllTransactions = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
-    const { page = "1", limit = "20" } = req.query;
+    const { page = "1", limit = "20", search, invoiceNumber } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
     const limitNum = Math.max(1, parseInt(limit as string, 10) || 20);
     const skip = (pageNum - 1) * limitNum;
 
+    const query: Record<string, unknown> = {};
+
+    if (invoiceNumber && typeof invoiceNumber === "string" && invoiceNumber.trim()) {
+      query.invoiceNumber = { $regex: invoiceNumber.trim(), $options: "i" };
+    } else if (search && typeof search === "string" && search.trim()) {
+      const q = search.trim();
+      query.$or = [
+        { invoiceNumber: { $regex: q, $options: "i" } },
+        { stripeSessionId: { $regex: q, $options: "i" } },
+      ];
+    }
+
     const [transactions, total] = await Promise.all([
-      Transaction.find()
+      Transaction.find(query)
         .populate("customerId", "name email phone image")
         .populate({
           path: "appointmentId",
@@ -438,7 +450,7 @@ export const getAllTransactions = asyncHandler(
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
-      Transaction.countDocuments(),
+      Transaction.countDocuments(query),
     ]);
 
     res.status(200).json(
@@ -460,22 +472,10 @@ export const getAllTransactions = asyncHandler(
 );
 
 export const deleteTransaction = asyncHandler(
-  async (req: AuthenticatedRequest, res: Response) => {
-    if (!req.user) {
-      throw new ApiError(401, "Authentication required.");
-    }
-
-    const { id } = req.params;
-    const transaction = await Transaction.findById(id);
-
-    if (!transaction) {
-      throw new ApiError(404, "Transaction not found.");
-    }
-
-    await Transaction.findByIdAndDelete(id);
-
-    res.status(200).json(
-      new ApiResponse(200, null, "Transaction deleted successfully.")
+  async (_req: AuthenticatedRequest, _res: Response) => {
+    throw new ApiError(
+      403,
+      "Financial ledger transactions are immutable audit records and cannot be deleted."
     );
   }
 );
